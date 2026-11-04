@@ -69,17 +69,16 @@ async function tryLoad(loadImage, file) {
 }
 
 // ---------------------------------------------------------------------------
-// SƠ ĐỒ CHỖ NGỒI
+// SƠ ĐỒ CHỖ NGỒI — 5 hàng x 10 cột = 50 chỗ
 // Số liệu hàng ghế được đo trực tiếp trên hall.jpg của repo này (5 hàng nệm
 // thật, từ y≈1240 tới y≈1712), nên người ngồi đúng trên nệm chứ không lơ lửng.
-// 6 hàng x 6 cột = 36 chỗ như bản gốc.
 // ---------------------------------------------------------------------------
-const ROWS = 6;
-const COLS = 6;
-const AISLE = 0.9;
+const ROWS = 5;
+const COLS = 10;
+const AISLE = 0.5;
 
 // tâm từng hàng nệm (đo trên ảnh nền)
-const ROW_Y = [1240, 1310, 1392, 1487, 1595, 1712];
+const ROW_Y = [1240, 1330, 1440, 1570, 1712];
 
 export const TOTAL_SEATS = ROWS * COLS;
 
@@ -88,13 +87,13 @@ export function buildSeats() {
   for (let r = 0; r < ROWS; r++) {
     const t = ROWS > 1 ? r / (ROWS - 1) : 0; // 0 = hàng xa nhất, 1 = hàng gần nhất
     const y = ROW_Y[r];
-    const half = 320 + 100 * t; // nửa chiều rộng sàn theo độ xa
-    const scale = 0.26 + 0.24 * t; // sprite nhỏ ở xa, lớn ở gần
+    const half = 300 + 120 * t; // nửa chiều rộng sàn theo độ xa
+    const scale = 0.26 + 0.2 * t; // sprite nhỏ ở xa, lớn ở gần
     for (let c = 0; c < COLS; c++) {
       let u = (c - (COLS - 1) / 2) / ((COLS - 1) / 2); // -1..1
       u += (Math.sign(u) * AISLE) / (COLS - 1); // mở lối đi giữa
       // kẹp trong khung để người ngồi sát mép không bị cắt mất nửa người
-      const x = Math.max(62, Math.min(SW - 62, SW / 2 + u * half));
+      const x = Math.max(46, Math.min(SW - 46, SW / 2 + u * half));
       seats.push({ x, y, scale, r, c, order: r * COLS + c });
     }
   }
@@ -197,13 +196,13 @@ export async function createChanhDienImage(info = {}) {
       tagH = h;
     }
 
-    // tên phật tử — cỡ chữ theo độ xa, giới hạn bề rộng để 6 người/hàng không đè nhau
-    const fsTag = Math.max(15, Math.round(19 * seat.scale + 8));
+    // tên phật tử — 10 người/hàng nên chữ nhỏ lại và cắt ngắn để không đè nhau
+    const fsTag = Math.max(11, Math.round(15 * seat.scale + 6));
     ctx.font = `600 ${fsTag}px ${FONT_SERIF}`;
-    const label = clipText(ctx, m.name, 128);
-    const tw = ctx.measureText(label).width + 18;
-    const th = Math.round(fsTag * 1.5);
-    const tagY = seat.y - tagH - 6;
+    const label = clipText(ctx, m.name, 62);
+    const tw = ctx.measureText(label).width + 14;
+    const th = Math.round(fsTag * 1.45);
+    const tagY = seat.y - tagH - 5;
     const tagX = Math.max(10, Math.min(SW - tw - 10, seat.x - tw / 2));
     ctx.fillStyle = m.isMe ? "rgba(138,42,30,.92)" : "rgba(16,9,6,.8)";
     roundRect(ctx, tagX, tagY - th / 2, tw, th, th / 2);
@@ -295,4 +294,185 @@ export async function createChanhDienImage(info = {}) {
   const file = path.join(TEMP_DIR, `chanh-dien-${Date.now()}-${Math.random().toString(36).slice(2, 7)}.jpg`);
   fs.writeFileSync(file, buf);
   return file;
+}
+
+// ===========================================================================
+// ẢNH BẢNG CÔNG ĐỨC (chua top) — có avatar tròn
+// ===========================================================================
+const TOP_W = 900;
+const TOP_H = 1280;
+
+function drawCoverCircle(ctx, img, cx, cy, r) {
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.closePath();
+  ctx.clip();
+  // cắt vuông giữa ảnh rồi vẽ vừa vòng tròn
+  const side = Math.min(img.width, img.height);
+  const sx = (img.width - side) / 2;
+  const sy = (img.height - side) / 2;
+  ctx.drawImage(img, sx, sy, side, side, cx - r, cy - r, r * 2, r * 2);
+  ctx.restore();
+}
+
+/**
+ * Vẽ bảng công đức kèm avatar.
+ * @param {object} info
+ * @param {Array}  info.entries  [{ name, coins, gifts, avatarPath }]
+ * @param {string} info.note
+ * @param {number} info.totalMembers
+ * @returns {Promise<string|null>} đường dẫn file JPEG
+ */
+export async function createChanhDienTopImage(info = {}) {
+  const { entries = [], note = "", totalMembers = 0 } = info;
+  const { createCanvas, loadImage } = await loadLib();
+
+  const canvas = createCanvas(TOP_W, TOP_H);
+  const ctx = canvas.getContext("2d");
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+
+  // --- nền tối + viền vàng ---
+  const g = ctx.createLinearGradient(0, 0, 0, TOP_H);
+  g.addColorStop(0, "#1b0f08");
+  g.addColorStop(0.5, "#140a06");
+  g.addColorStop(1, "#0b0604");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, TOP_W, TOP_H);
+
+  const halo = await tryLoad(loadImage, path.join(ASSET_DIR_OF(info), "fx_halo.png"));
+  if (halo) {
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.globalAlpha = 0.16;
+    ctx.drawImage(halo, TOP_W / 2 - halo.width, -halo.height * 0.35, halo.width * 2, halo.height * 2);
+    ctx.restore();
+  }
+
+  ctx.strokeStyle = "rgba(226,176,79,.45)";
+  ctx.lineWidth = 3;
+  roundRect(ctx, 22, 22, TOP_W - 44, TOP_H - 44, 26);
+  ctx.stroke();
+
+  // --- tiêu đề ---
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillStyle = "#e8b954";
+  ctx.font = `700 46px ${FONT_SERIF}`;
+  ctx.fillText("TẤM LÒNG THÀNH", TOP_W / 2, 96);
+  ctx.fillStyle = "#b59a76";
+  ctx.font = `500 24px ${FONT_SANS}`;
+  ctx.fillText(
+    totalMembers > 0 ? `${totalMembers}/${TOTAL_SEATS} phật tử đang an tọa` : "Bảng công đức",
+    TOP_W / 2,
+    140
+  );
+
+  ctx.strokeStyle = "rgba(226,176,79,.25)";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(70, 172);
+  ctx.lineTo(TOP_W - 70, 172);
+  ctx.stroke();
+
+  // --- danh sách ---
+  const list = entries.slice(0, 10);
+  const rowH = Math.min(96, Math.floor((TOP_H - 260) / Math.max(1, list.length)));
+  const startY = 196;
+  const RANK_COLORS = ["#f2c14e", "#cfd6de", "#c98a52"];
+
+  for (let i = 0; i < list.length; i++) {
+    const e = list[i];
+    const cy = startY + rowH * i + rowH / 2;
+    const left = 60;
+    const right = TOP_W - 60;
+
+    // nền hàng
+    ctx.fillStyle = i < 3 ? "rgba(226,176,79,.09)" : "rgba(255,255,255,.03)";
+    roundRect(ctx, left, cy - rowH / 2 + 6, right - left, rowH - 12, 16);
+    ctx.fill();
+
+    // hạng
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = RANK_COLORS[i] || "#8b7355";
+    ctx.font = `700 ${i < 3 ? 34 : 28}px ${FONT_SERIF}`;
+    ctx.fillText(String(i + 1), left + 34, cy);
+
+    // avatar tròn
+    const ar = Math.min(32, rowH / 2 - 8);
+    const ax = left + 86;
+    const avatarImg = await tryLoad(loadImage, e.avatarPath);
+    if (avatarImg) {
+      drawCoverCircle(ctx, avatarImg, ax, cy, ar);
+    } else {
+      ctx.fillStyle = "rgba(226,176,79,.16)";
+      ctx.beginPath();
+      ctx.arc(ax, cy, ar, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#e8b954";
+      ctx.font = `700 ${Math.round(ar)}px ${FONT_SERIF}`;
+      const ch = String(e.name || "?").trim().charAt(0).toUpperCase() || "?";
+      ctx.fillText(ch, ax, cy + 1);
+    }
+    // viền avatar
+    ctx.strokeStyle = i < 3 ? RANK_COLORS[i] : "rgba(226,176,79,.35)";
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.arc(ax, cy, ar, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // tên
+    ctx.textAlign = "left";
+    ctx.fillStyle = "#f6ead2";
+    ctx.font = `600 26px ${FONT_SANS}`;
+    ctx.fillText(clipText(ctx, e.name, right - ax - ar - 150), ax + ar + 18, cy - 8);
+
+    // phụ: số lễ
+    ctx.fillStyle = "#9c8674";
+    ctx.font = `500 18px ${FONT_SANS}`;
+    ctx.fillText(`${e.gifts || 0} lần dâng lễ`, ax + ar + 18, cy + 20);
+
+    // công đức
+    ctx.textAlign = "right";
+    ctx.fillStyle = i < 3 ? RANK_COLORS[i] : "#e8d6b0";
+    ctx.font = `700 28px ${FONT_SANS}`;
+    ctx.fillText(`${e.coins}`, right - 22, cy - 6);
+    ctx.fillStyle = "#8b7355";
+    ctx.font = `500 16px ${FONT_SANS}`;
+    ctx.fillText("công đức", right - 22, cy + 20);
+    ctx.textAlign = "left";
+  }
+
+  if (list.length === 0) {
+    ctx.textAlign = "center";
+    ctx.fillStyle = "#8b7355";
+    ctx.font = `500 28px ${FONT_SANS}`;
+    ctx.fillText("Chưa ai dâng lễ", TOP_W / 2, TOP_H / 2);
+  }
+
+  // --- ghi chú ---
+  if (note) {
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.font = `500 22px ${FONT_SANS}`;
+    ctx.fillStyle = "#b59a76";
+    ctx.fillText(clipText(ctx, note, TOP_W - 120), TOP_W / 2, TOP_H - 56);
+  }
+
+  let buf = null;
+  for (const q of QUALITY_STEPS) {
+    buf = encodeJpeg(canvas, q);
+    if (buf.length <= MAX_BYTES) break;
+  }
+
+  fs.mkdirSync(TEMP_DIR, { recursive: true });
+  const file = path.join(TEMP_DIR, `chanh-dien-top-${Date.now()}-${Math.random().toString(36).slice(2, 7)}.jpg`);
+  fs.writeFileSync(file, buf);
+  return file;
+}
+
+function ASSET_DIR_OF(info) {
+  return info?.assetDir || path.resolve("./assets/chanh-dien");
 }

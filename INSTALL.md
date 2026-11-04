@@ -24,9 +24,11 @@ import { initializeChanhDien } from "./chanh-dien/chanh-dien.js";
 
 ```js
 chanhDien: {
-  rooms: {},
+  enabled: true,
+  hall: { members: [], note: "" },
+  pr: { on: false, intervalMs: 10800000 },
   merits: {},
-  activeThreads: {},
+  imageIndex: {},
 },
 ```
 
@@ -112,10 +114,10 @@ Thêm vào mảng `commands`:
 
 ```json
 {
-  "name": "chanhdien",
-  "alias": ["cdien", "dientuong"],
-  "description": "Chánh Điện Tịnh Tâm — cả nhóm cùng ngồi thiền trong một chánh điện 36 chỗ, gõ \"tham gia\" để an tọa, dâng lễ để tích công đức",
-  "syntax": "{p}chanhdien [on|off|top|status|help]",
+  "name": "chua",
+  "alias": ["chanhdien", "cdien", "dientuong"],
+  "description": "Chánh Điện Tịnh Tâm — một chánh điện chung 50 chỗ cho toàn server. Gõ là vào ngay, hoặc gõ \"tham gia\", hoặc thả tim vào ảnh điện. QTV: on/off toàn server, pr on/off/time để gửi ảnh định kỳ cho mọi nhóm, top để xem bảng công đức kèm avatar",
+  "syntax": "{p}chua [on|off|pr on|pr off|pr time 30s|top|status|help]",
   "permission": "all",
   "countdown": 2,
   "icon": "🏮",
@@ -130,19 +132,25 @@ Thêm vào mảng `commands`:
 ## Cách chơi
 
 ```
-#chanhdien on          → QTV mở điện (nhóm phải bật gameactive trước)
-tham gia               → an tọa
-2                      → dâng hương +5
-tụng kinh              → niệm Phật
-công đức               → top 3 trong điện
-ra                     → nhường chỗ
-#chanhdien off         → QTV đóng điện
+#chua                 vào điện ngay (không cần on/off trước)
+tham gia              vào điện (không prefix)
+❤️ vào ảnh điện        vào điện
+
+2                     dâng hương +5
+tụng kinh             niệm Phật
+công đức              top 3 trong điện
+ra                    nhường chỗ
+
+#chua on              bật toàn server (mọi bot)
+#chua pr on           gửi ảnh điện cho toàn bộ nhóm, lặp định kỳ
+#chua pr time 15p     đổi chu kỳ
+#chua top             ảnh bảng công đức kèm avatar
 ```
 
 ## Kiểm tra tài nguyên
 
 ```
-#chanhdien check
+#chua check
 ```
 
 Báo thiếu file nào trong `assets/chanh-dien/`.
@@ -151,10 +159,19 @@ Báo thiếu file nào trong `assets/chanh-dien/`.
 
 | Muốn đổi | Sửa ở |
 |---|---|
-| Số chỗ | `ROWS`, `COLS` trong `canvas-chanh-dien.js` (mặc định 6×6 = 36) |
+| Số chỗ | `ROWS`, `COLS` trong `canvas-chanh-dien.js` (mặc định 5×10 = 50) |
 | Vị trí hàng ghế | `ROW_Y` trong `canvas-chanh-dien.js` (đo lại theo `hall.jpg`) |
 | Giá trị mâm lễ | `GIFTS[].coins` trong `chanh-dien.js` |
-| Thời gian nhường chỗ | `MEMBER_IDLE_MS` (mặc định 45 phút) |
-| Thời gian tự đóng điện | `ROOM_IDLE_MS` (mặc định 60 phút) |
-| Nhịp gộp vẽ ảnh | `RENDER_DEBOUNCE_MS` (mặc định 1200ms) |
+| Chu kỳ gửi mặc định | `PR_DEFAULT_INTERVAL_MS` (3 giờ) |
+| Giới hạn tần suất đồng bộ | `PR_MIN_GAP_MS` (1 phút), `PR_SYNC_DEBOUNCE_MS` (20 giây) |
+| Thời gian nhường chỗ | `MEMBER_IDLE_MS` (45 phút) |
+| Bật/tắt mặc định | `DEFAULT_ENABLED` (true) |
+| Nhịp gộp vẽ ảnh | `RENDER_DEBOUNCE_MS` (1200ms) |
 | Thư mục asset | biến môi trường `CHANH_DIEN_ASSET_DIR` |
+
+## Lưu ý khi triển khai
+
+- `#chua on|off|pr` yêu cầu **quản trị bot** (`isAdmin(botId, uid)`), không phải chỉ QTV nhóm.
+- Broadcast gửi cho **mọi nhóm của mọi bot** đang chạy trong tiến trình (`apiManager`). Bot con chạy tiến trình riêng thì mỗi tiến trình tự có cờ `enabled` riêng.
+- Ảnh gửi lên Zalo được giữ ở mức < 480 KB để Zalo không nén lại (nén lại = mờ).
+
