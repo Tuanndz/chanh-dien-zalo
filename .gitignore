@@ -1,0 +1,14 @@
+node_modules/
+package-lock.json
+logs/
+data/
+*.log
+*.save*
+*.bak
+*.orig
+*.rej
+*~
+.DS_Store
+Thumbs.db
+.env
+.env.*
